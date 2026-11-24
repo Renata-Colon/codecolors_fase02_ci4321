@@ -38,6 +38,8 @@ export class EscenaGrafica implements EscenaJuego {
 
   // estado visual actual que se actualiza desde main.ts
   private desplazamientoX = 0; 
+  private desplazamientoZ = 0; 
+  private rotacionTorretaRad = 0;
   private inclinacionCanonRad = 45 * (Math.PI / 180); // arranca en 45 grados
   private nivelFuerzaActual: 1 | 2 | 3 = 1;
   private posicionProyectil: [number, number, number] = [0, 0, 0];
@@ -109,18 +111,37 @@ export class EscenaGrafica implements EscenaJuego {
       this.numIndicesIndicador.push(barra.numIndices);
     }
   }
+  //********************************************
+  // Calcula la cadena de matrices: Base (X,Z) -> Cabeza (rotación Y) -> Cañón (inclinación X)
+  private actualizarMatricesTanque(): void {
+    // 1. Posición de la base del tanque
+    mat4.identity(this.modelDesplazamientoX);
+    mat4.translate(this.modelDesplazamientoX, this.modelDesplazamientoX, [this.desplazamientoX, 1.0, this.desplazamientoZ]);
+
+    // 2. Cabeza/torreta: parte de la base, sube 0.5 y gira en Y
+    mat4.copy(this.modelEsfera, this.modelDesplazamientoX);
+    mat4.translate(this.modelEsfera, this.modelEsfera, [0, 0.5, 0]);
+    mat4.rotateY(this.modelEsfera, this.modelEsfera, this.rotacionTorretaRad);
+
+    // 3. Cañón: parte de la cabeza (hereda su giro Y), va al frente (-0.75 en Z) y sube/baja en X
+    mat4.copy(this.modelElevacion, this.modelEsfera);
+    mat4.translate(this.modelElevacion, this.modelElevacion, [0, 0, -0.75]);
+    mat4.rotateX(this.modelElevacion, this.modelElevacion, this.inclinacionCanonRad);
+  }
+//********************************
 
   public obtenerPuntaCanon(): PuntaCanon {
-    const LARGO_CANON = 2.0; 
+    const LARGO_CANON = 2.0;
+    this.actualizarMatricesTanque();
     
     // lógica de desplazamiento en X reutilizando la matriz
-    mat4.identity(this.modelDesplazamientoX);
-    mat4.translate(this.modelDesplazamientoX, this.modelDesplazamientoX, [this.desplazamientoX, 1.0, 0]);
+    //mat4.identity(this.modelDesplazamientoX);
+    //mat4.translate(this.modelDesplazamientoX, this.modelDesplazamientoX, [this.desplazamientoX, 1.0, this.desplazamientoZ]);
 
     // el pivote del cañón está en el frente del domo (Y=0.5, Z=-0.75) 
-    mat4.copy(this.modelElevacion, this.modelDesplazamientoX);
-    mat4.translate(this.modelElevacion, this.modelElevacion, [0, 0.5, -0.75]); 
-    mat4.rotateX(this.modelElevacion, this.modelElevacion, this.inclinacionCanonRad);
+    //mat4.copy(this.modelElevacion, this.modelDesplazamientoX);
+    //mat4.translate(this.modelElevacion, this.modelElevacion, [0, 0.5, -0.75]); 
+    //mat4.rotateX(this.modelElevacion, this.modelElevacion, this.inclinacionCanonRad);
 
     // la punta en espacio local del cañón está en (0, 0, -LARGO_CANON)
     const puntaLocal = vec4.fromValues(0, 0, -LARGO_CANON, 1);
@@ -139,8 +160,10 @@ export class EscenaGrafica implements EscenaJuego {
   }
 
   // recibe la posición en X directamente
-  public fijarTransformacionTorreta(desplazamiento: number, inclinacion: number): void {
-    this.desplazamientoX = desplazamiento;
+  public fijarTransformacionTorreta(desplazamientoX: number, desplazamientoZ: number, rotacionTorreta: number, inclinacion: number): void {
+    this.desplazamientoX = desplazamientoX;
+    this.desplazamientoZ = desplazamientoZ;
+    this.rotacionTorretaRad = rotacionTorreta * (Math.PI / 180);
     this.inclinacionCanonRad = inclinacion * (Math.PI / 180);
   }
 
@@ -209,10 +232,13 @@ export class EscenaGrafica implements EscenaJuego {
     mat4.scale(modelMontana3, modelMontana3, [0.9, 0.8, 1]);
     this.ff.setModelMatrix(modelMontana3);
     this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesMontanas, this.gl.UNSIGNED_SHORT, 0);
+    
+    // calculamos la posición y rotación actual de todas las partes del tanque
+    this.actualizarMatricesTanque();
 
     // nodo de desplazamiento horizontal, base del tanque
-    mat4.identity(this.modelDesplazamientoX);
-    mat4.translate(this.modelDesplazamientoX, this.modelDesplazamientoX, [this.desplazamientoX, 1.0, 0]);
+    //mat4.identity(this.modelDesplazamientoX);
+    //mat4.translate(this.modelDesplazamientoX, this.modelDesplazamientoX, [this.desplazamientoX, 1.0, 0]);
 
     // base de la torreta
     mat4.copy(this.modelBase, this.modelDesplazamientoX);
@@ -223,17 +249,17 @@ export class EscenaGrafica implements EscenaJuego {
     this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesBase, this.gl.UNSIGNED_SHORT, 0);
 
     // torreta superior 
-    mat4.copy(this.modelEsfera, this.modelDesplazamientoX);
-    mat4.translate(this.modelEsfera, this.modelEsfera, [0, 0.5, 0]); 
+    //mat4.copy(this.modelEsfera, this.modelDesplazamientoX);
+    //mat4.translate(this.modelEsfera, this.modelEsfera, [0, 0.5, 0]); 
     this.ff.setModelMatrix(this.modelEsfera);
     this.ff.setColor(this.colorDomo); 
     this.gl.bindVertexArray(this.vaoTorretaSuperior);
     this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesTorreta, this.gl.UNSIGNED_SHORT, 0);
 
     // nodo de elevación
-    mat4.copy(this.modelElevacion, this.modelDesplazamientoX);
-    mat4.translate(this.modelElevacion, this.modelElevacion, [0, 0.5, -0.75]); 
-    mat4.rotateX(this.modelElevacion, this.modelElevacion, this.inclinacionCanonRad);
+    //mat4.copy(this.modelElevacion, this.modelDesplazamientoX);
+    //mat4.translate(this.modelElevacion, this.modelElevacion, [0, 0.5, -0.75]); 
+    //mat4.rotateX(this.modelElevacion, this.modelElevacion, this.inclinacionCanonRad);
 
     // cañón
     this.ff.setModelMatrix(this.modelElevacion);

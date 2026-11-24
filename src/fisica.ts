@@ -60,6 +60,7 @@ export class MotorFisico {
       if (distanciaCuadrada <= sumaRadiosCuadrada) {
         objetivo.vivo = false; // se alcanzo la esfera
         proj.activo = false;
+        estado.puntaje += 100;
         break;
       }
     }

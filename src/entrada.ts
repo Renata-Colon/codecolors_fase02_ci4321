@@ -45,28 +45,43 @@ export class ManejadorEntrada {
     if (!this.referenciaEstado) return;
     
     const VELOCIDAD_INCLINACION = 30; 
+    const VELOCIDAD_GIRO_TORRETA = 60; // grados por segundo
     const VELOCIDAD_MOVIMIENTO = 8;  
 
-    // desplazamiento horizontal 
-    if (this.teclas['KeyA'] || this.teclas['ArrowLeft']) {
-       this.referenciaEstado.desplazamientoX -= VELOCIDAD_MOVIMIENTO * dt;
+    // 1. BASE DEL VEHÍCULO (WASD -> Traslación en X y Z)
+    // A / D: izquierda y derecha (eje X)
+    if (this.teclas['KeyA']) {
+      this.referenciaEstado.desplazamientoX -= VELOCIDAD_MOVIMIENTO * dt;
     }
-    if (this.teclas['KeyD'] || this.teclas['ArrowRight']) {
-       this.referenciaEstado.desplazamientoX += VELOCIDAD_MOVIMIENTO * dt;
+    if (this.teclas['KeyD']) {
+      this.referenciaEstado.desplazamientoX += VELOCIDAD_MOVIMIENTO * dt;
     }
 
-    // límite estricto para que no se salga del mapa
-    this.referenciaEstado.desplazamientoX = Math.max(-10, Math.min(10, this.referenciaEstado.desplazamientoX));
+    // W / S: avanzar (-Z) y retroceder (+Z)
+    if (this.teclas['KeyW']) {
+      this.referenciaEstado.desplazamientoZ -= VELOCIDAD_MOVIMIENTO * dt;
+    }
+    if (this.teclas['KeyS']) {
+      this.referenciaEstado.desplazamientoZ += VELOCIDAD_MOVIMIENTO * dt;
+    }
 
-    // elevación vertical
-    if (this.teclas['KeyW'] || this.teclas['ArrowUp']) {
+    // 2. CABEZA / TORRETA (Flechas Izquierda / Derecha -> Rotación en Y)
+    if (this.teclas['ArrowLeft']) {
+      this.referenciaEstado.rotacionTorreta += VELOCIDAD_GIRO_TORRETA * dt;
+    }
+    if (this.teclas['ArrowRight']) {
+      this.referenciaEstado.rotacionTorreta -= VELOCIDAD_GIRO_TORRETA * dt;
+    }
+
+    // 3. INCLINACIÓN DEL CAÑÓN (Flechas Arriba / Abajo -> Rotación en X)
+    if (this.teclas['ArrowUp']) {
       this.referenciaEstado.inclinacionCanon = Math.min(90, this.referenciaEstado.inclinacionCanon + VELOCIDAD_INCLINACION * dt);
     }
-    if (this.teclas['KeyS'] || this.teclas['ArrowDown']) {
+    if (this.teclas['ArrowDown']) {
       this.referenciaEstado.inclinacionCanon = Math.max(5, this.referenciaEstado.inclinacionCanon - VELOCIDAD_INCLINACION * dt);
     }
 
-    // alternar fuerza con F
+    // Alternar fuerza con F
     if (this.cambioFuerzaSolicitado) {
       if (this.referenciaEstado.nivelFuerza === 1) {
         this.referenciaEstado.nivelFuerza = 2;
@@ -78,4 +93,4 @@ export class ManejadorEntrada {
       this.cambioFuerzaSolicitado = false;
     }
   }
-}
+ }

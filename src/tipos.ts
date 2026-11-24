@@ -19,8 +19,11 @@ export interface Proyectil {
 
 export interface EstadoJuego {
   desplazamientoX: number; 
+  desplazamientoZ: number; // ahora podemos movernos en z
+  rotacionTorreta: number; // tambien se puede rotar la torreta
   inclinacionCanon: number;
   nivelFuerza: 1 | 2 | 3;
+  puntaje: number;
   proyectil: Proyectil;
   objetivos: Objetivo[];
 }

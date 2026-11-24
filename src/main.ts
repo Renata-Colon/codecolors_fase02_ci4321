@@ -11,7 +11,7 @@ import { EscenaGrafica } from './escena';
 // contrato de la escena
 export interface EscenaJuego {
   obtenerPuntaCanon: () => PuntaCanon;
-  fijarTransformacionTorreta: (desplazamiento: number, inclinacion: number) => void;
+  fijarTransformacionTorreta: (x: number, z: number, rotacionTorreta: number, inclinacion: number) => void;
   fijarIndicadorFuerza: (nivel: 1 | 2 | 3) => void;
   fijarTransformacionProyectil: (posicion: [number, number, number], activo: boolean) => void;
   obtenerPosicionesObjetivos: () => { id: number; posicion: [number, number, number]; radio: number }[];
@@ -39,8 +39,11 @@ export class OrquestadorJuego {
     // estado inicial del juego
     this.estado = {
       desplazamientoX: 0, 
+      desplazamientoZ: 0,
+      rotacionTorreta: 0,
       inclinacionCanon: 30,
       nivelFuerza: 1,
+      puntaje: 0,
       proyectil: {
         activo: false,
         posicion: [0, 0, 0],
@@ -60,9 +63,12 @@ export class OrquestadorJuego {
 
   public reiniciar(): void {
     this.reiniciandoPendiente = false;
-    this.estado.desplazamientoX = 0; 
+    this.estado.desplazamientoX = 0;
+    this.estado.desplazamientoZ = 0;
+    this.estado.rotacionTorreta = 0;
     this.estado.inclinacionCanon = 30;
     this.estado.nivelFuerza = 1;
+    this.estado.puntaje = 0;
     this.estado.proyectil = {
       activo: false,
       posicion: [0, 0, 0],
@@ -73,7 +79,7 @@ export class OrquestadorJuego {
 
     // Sincronizar con la escena
     this.escena.actualizarObjetivos(this.estado.objetivos);
-    this.escena.fijarTransformacionTorreta(this.estado.desplazamientoX, this.estado.inclinacionCanon);
+    this.escena.fijarTransformacionTorreta(this.estado.desplazamientoX, this.estado.desplazamientoZ, this.estado.rotacionTorreta, this.estado.inclinacionCanon);
     this.escena.fijarIndicadorFuerza(this.estado.nivelFuerza);
     this.escena.fijarTransformacionProyectil(this.estado.proyectil.posicion, this.estado.proyectil.activo);
   }
@@ -115,7 +121,7 @@ export class OrquestadorJuego {
     this.escena.actualizarObjetivos(this.estado.objetivos);
 
     // sincronizar: le pasa a la escena los nuevos valores para que dibuje en la posición correcta
-    this.escena.fijarTransformacionTorreta(this.estado.desplazamientoX, this.estado.inclinacionCanon);
+    this.escena.fijarTransformacionTorreta(this.estado.desplazamientoX, this.estado.desplazamientoZ, this.estado.rotacionTorreta, this.estado.inclinacionCanon);
     this.escena.fijarIndicadorFuerza(this.estado.nivelFuerza);
     this.escena.fijarTransformacionProyectil(this.estado.proyectil.posicion, this.estado.proyectil.activo);
 
