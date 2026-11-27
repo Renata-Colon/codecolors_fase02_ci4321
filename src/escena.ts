@@ -1,365 +1,408 @@
-// escena 
-import { EscenaJuego } from './main';
-import { PuntaCanon } from './tipos';
-import * as geo from './geometria';
-import { mat4, vec4 } from 'gl-matrix'; // para calcular la punta del cañón
+import { EscenaJuego } from './main'
+import { PuntaCanon } from './tipos'
+import * as geo from './geometria'
+import { cargarTexturas, texturasJuego } from './texturas'
+import { mat4, vec4 } from 'gl-matrix'
 
+// escena grafica del juego
 export class EscenaGrafica implements EscenaJuego {
-  private gl: WebGL2RenderingContext;
-  private ff: any; // usamos any aquí para que typescript no se queje con la librería del profe
+  private gl: WebGL2RenderingContext
+  private ff: any
   
-  // vaos para cada parte de la escena
-  private vaoSuelo: WebGLVertexArrayObject | null = null;
-  private vaoBaseTorreta: WebGLVertexArrayObject | null = null;
-  private vaoTorretaSuperior: WebGLVertexArrayObject | null = null;
-  private vaoCanon: WebGLVertexArrayObject | null = null;
-  private vaoProyectil: WebGLVertexArrayObject | null = null;
-  private vaoObjetivos: WebGLVertexArrayObject[] = [];
-  private vaoIndicador: WebGLVertexArrayObject[] = []; // 3 barras
-  private vaoMontanas: WebGLVertexArrayObject | null = null;
+  // aqui guardamos las texturas cargadas
+  private texturas: texturasJuego | null = null
 
-  // Matrices reutilizables para evitar asignaciones en el bucle de renderizado 
-  private modelDesplazamientoX = mat4.create();
-  private modelBase = mat4.create();
-  private modelEsfera = mat4.create();
-  private modelElevacion = mat4.create();
-  private modelIndicador = mat4.create();
-  private modelBarra = mat4.create();
+  // vaos para cada parte del tanque y entorno
+  private vaoSuelo: WebGLVertexArrayObject | null = null
+  private vaoMontanas: WebGLVertexArrayObject | null = null
+  private vaoCaparazon: WebGLVertexArrayObject | null = null
+  private vaoBorde: WebGLVertexArrayObject | null = null
+  private vaoPua: WebGLVertexArrayObject | null = null
+  private vaoRueda: WebGLVertexArrayObject | null = null
+  private vaoBoca: WebGLVertexArrayObject | null = null
+  private vaoCanon: WebGLVertexArrayObject | null = null
+  private vaoProyectil: WebGLVertexArrayObject | null = null
+  private vaoObjetivos: WebGLVertexArrayObject[] = []
+  private vaoCuadro: WebGLVertexArrayObject | null = null 
 
-  // guardamos la cantidad de índices para saber cuánto dibujar
-  private numIndicesSuelo = 0;
-  private numIndicesBase = 0;
-  private numIndicesTorreta = 0;
-  private numIndicesCanon = 0;
-  private numIndicesProyectil = 0;
-  private numIndicesObjetivos: number[] = [];
-  private numIndicesIndicador: number[] = [];
-  private numIndicesMontanas = 0;
+  private numIndicesSuelo = 0
+  private numIndicesMontanas = 0
+  private numIndicesCaparazon = 0
+  private numIndicesBorde = 0
+  private numIndicesPua = 0
+  private numIndicesRueda = 0
+  private numIndicesBoca = 0
+  private numIndicesCanon = 0
+  private numIndicesProyectil = 0
+  private numIndicesObjetivos: number[] = []
+  private numIndicesCuadro = 0
 
-  // estado visual actual que se actualiza desde main.ts
-  private desplazamientoX = 0; 
-  private desplazamientoZ = 0; 
-  private rotacionTorretaRad = 0;
-  private inclinacionCanonRad = 45 * (Math.PI / 180); // arranca en 45 grados
-  private nivelFuerzaActual: 1 | 2 | 3 = 1;
-  private posicionProyectil: [number, number, number] = [0, 0, 0];
-  private proyectilActivo = false;
-  private objetivosVivos = [true, true, true];
+  // matrices prealocadas para no crear basura
+  private modelCuerpo = mat4.create()
+  private modelRueda = mat4.create()
+  private modelCaparazon = mat4.create()
+  private modelBorde = mat4.create()
+  private modelPua = mat4.create()
+  private modelBoca = mat4.create()
+  private modelTorreta = mat4.create()
+  private modelElevacion = mat4.create()
+  private modelUI = mat4.create()
 
-  // colores unificados para el tanque gris oscuro
-  private readonly colorTanque: [number, number, number] = [0.3, 0.3, 0.3];
-  private readonly colorDomo: [number, number, number] = [0.45, 0.45, 0.45];
+  // estado visual del tanque
+  private desplazamientoX = 0
+  private desplazamientoZ = 0
+  private rotacionCuerpoRad = 0
+  private rotacionTorretaRad = 0
+  private inclinacionCanonRad = 45 * (Math.PI / 180)
+  private nivelFuerzaActual: 1 | 2 | 3 = 1
+  private posicionProyectil: [number, number, number] = [0, 0, 0]
+  private proyectilActivo = false
+  private objetivosVivos = [true, true, true]
+
+  // ruedas giran proporcional a la distancia
+  private rotacionRuedaRad = 0
+  private ultimaX = 0
+  private ultimaZ = 0
+  private readonly RADIO_RUEDA = 0.35
+
+  // paleta de colores estilo bowser
+  private readonly colorCaparazon: [number, number, number] = [0.15, 0.55, 0.15]
+  private readonly colorBorde: [number, number, number] = [0.95, 0.9, 0.78]
+  private readonly colorPua: [number, number, number] = [0.9, 0.8, 0.5]
+  private readonly colorRueda: [number, number, number] = [0.12, 0.12, 0.12]
+  private readonly colorBoca: [number, number, number] = [0.03, 0.03, 0.03]
+  private readonly colorCanon: [number, number, number] = [0.25, 0.25, 0.28]
 
   constructor(gl: WebGL2RenderingContext, ff: any) {
-    this.gl = gl;
-    this.ff = ff;
-    this.inicializarGeometria();
+    this.gl = gl
+    this.ff = ff
+    this.inicializarGeometria()
   }
 
-  // función auxiliar porque la librería ff no tiene createVAO y hay que hacerlo a mano con webgl2
-  private crearVAO(posiciones: Float32Array, indices: Uint16Array): WebGLVertexArrayObject {
-    const vao = this.gl.createVertexArray()!;
-    this.gl.bindVertexArray(vao);
-    const posBuffer = this.gl.createBuffer()!;
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, posBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, posiciones, this.gl.STATIC_DRAW);
-    this.gl.enableVertexAttribArray(0); // el slot 0 es para la posición
-    this.gl.vertexAttribPointer(0, 3, this.gl.FLOAT, false, 0, 0);
-    const idxBuffer = this.gl.createBuffer()!;
-    this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, idxBuffer);
-    this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indices, this.gl.STATIC_DRAW);
-    this.gl.bindVertexArray(null); // desvincular al terminar
-    return vao;
+  // metodo publico para cargar imagenes antes de iniciar
+  public async cargarTexturas(): Promise<void> {
+    this.texturas = await cargarTexturas(this.gl)
+    console.log('textura del suelo cargada correctamente')
   }
 
-  private inicializarGeometria() {
-    // aquí llamamos a las funciones de geometria.ts y guardamos los vaos
-    const suelo = geo.crearSuelo();
-    this.vaoSuelo = this.crearVAO(suelo.posiciones, suelo.indices);
-    this.numIndicesSuelo = suelo.numIndices;
-
-    // montañas de fondo
-    const montana = geo.crearMontana();
-    this.vaoMontanas = this.crearVAO(montana.posiciones, montana.indices);
-    this.numIndicesMontanas = montana.numIndices;
-
-    const base = geo.crearBaseTorreta();
-    this.vaoBaseTorreta = this.crearVAO(base.posiciones, base.indices);
-    this.numIndicesBase = base.numIndices;
-
-    const torreta = geo.crearTorretaSuperior();
-    this.vaoTorretaSuperior = this.crearVAO(torreta.posiciones, torreta.indices);
-    this.numIndicesTorreta = torreta.numIndices;
-
-    const canon = geo.crearCanon();
-    this.vaoCanon = this.crearVAO(canon.posiciones, canon.indices);
-    this.numIndicesCanon = canon.numIndices;
-
-    const proyectil = geo.crearEsfera(0.25, 20, 20); 
-    this.vaoProyectil = this.crearVAO(proyectil.posiciones, proyectil.indices);
-    this.numIndicesProyectil = proyectil.numIndices;
-
-    for (let i = 0; i < 3; i++) {
-      const obj = geo.crearEsfera(0.8, 24, 24); // esferas suaves para los objetivos
-      this.vaoObjetivos.push(this.crearVAO(obj.posiciones, obj.indices));
-      this.numIndicesObjetivos.push(obj.numIndices);
-    }
-
-    for (let i = 0; i < 3; i++) {
-      const barra = geo.crearBarraIndicador();
-      this.vaoIndicador.push(this.crearVAO(barra.posiciones, barra.indices));
-      this.numIndicesIndicador.push(barra.numIndices);
-    }
+  // helper para desactivar texturas y desbindear
+  private sinTextura(): void {
+    this.ff.disable('texture2D')
+    this.gl.activeTexture(this.gl.TEXTURE0)
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null)
   }
-  //********************************************
-  // Calcula la cadena de matrices: Base (X,Z) -> Cabeza (rotación Y) -> Cañón (inclinación X)
-  private actualizarMatricesTanque(): void {
-    // 1. Posición de la base del tanque
-    mat4.identity(this.modelDesplazamientoX);
-    mat4.translate(this.modelDesplazamientoX, this.modelDesplazamientoX, [this.desplazamientoX, 1.0, this.desplazamientoZ]);
 
-    // 2. Cabeza/torreta: parte de la base, sube 0.5 y gira en Y
-    mat4.copy(this.modelEsfera, this.modelDesplazamientoX);
-    mat4.translate(this.modelEsfera, this.modelEsfera, [0, 0.5, 0]);
-    mat4.rotateY(this.modelEsfera, this.modelEsfera, this.rotacionTorretaRad);
-
-    // 3. Cañón: parte de la cabeza (hereda su giro Y), va al frente (-0.75 en Z) y sube/baja en X
-    mat4.copy(this.modelElevacion, this.modelEsfera);
-    mat4.translate(this.modelElevacion, this.modelElevacion, [0, 0, -0.75]);
-    mat4.rotateX(this.modelElevacion, this.modelElevacion, this.inclinacionCanonRad);
-  }
-//********************************
-
-  public obtenerPuntaCanon(): PuntaCanon {
-    const LARGO_CANON = 2.0;
-    this.actualizarMatricesTanque();
+  // funcion auxiliar para crear vao con posiciones y uvs
+  private crearVAO(posiciones: Float32Array, uvs: Float32Array, indices: Uint16Array): WebGLVertexArrayObject {
+    const vao = this.gl.createVertexArray()!
+    this.gl.bindVertexArray(vao)
+    const posBuffer = this.gl.createBuffer()!
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, posBuffer)
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, posiciones, this.gl.STATIC_DRAW)
     
-    // lógica de desplazamiento en X reutilizando la matriz
-    //mat4.identity(this.modelDesplazamientoX);
-    //mat4.translate(this.modelDesplazamientoX, this.modelDesplazamientoX, [this.desplazamientoX, 1.0, this.desplazamientoZ]);
+    // slot cero para posiciones
+    this.gl.enableVertexAttribArray(0)
+    this.gl.vertexAttribPointer(0, 3, this.gl.FLOAT, false, 0, 0)
+    
+    const uvBuffer = this.gl.createBuffer()!
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, uvBuffer)
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, uvs, this.gl.STATIC_DRAW)
+    
+    // slot tres para uvs segun la libreria del profe
+    this.gl.enableVertexAttribArray(3)
+    this.gl.vertexAttribPointer(3, 2, this.gl.FLOAT, false, 0, 0)
+    
+    const idxBuffer = this.gl.createBuffer()!
+    this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, idxBuffer)
+    this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indices, this.gl.STATIC_DRAW)
+    this.gl.bindVertexArray(null)
+    return vao
+  }
 
-    // el pivote del cañón está en el frente del domo (Y=0.5, Z=-0.75) 
-    //mat4.copy(this.modelElevacion, this.modelDesplazamientoX);
-    //mat4.translate(this.modelElevacion, this.modelElevacion, [0, 0.5, -0.75]); 
-    //mat4.rotateX(this.modelElevacion, this.modelElevacion, this.inclinacionCanonRad);
+  // cargar todas las geometrias y crear sus vao
+  private inicializarGeometria() {
+    const suelo = geo.crearSuelo()
+    this.vaoSuelo = this.crearVAO(suelo.posiciones, suelo.uvs, suelo.indices)
+    this.numIndicesSuelo = suelo.numIndices
+    const montana = geo.crearMontana()
+    this.vaoMontanas = this.crearVAO(montana.posiciones, montana.uvs, montana.indices)
+    this.numIndicesMontanas = montana.numIndices
+    const caparazon = geo.crearCaparazon(1.2, 20)
+    this.vaoCaparazon = this.crearVAO(caparazon.posiciones, caparazon.uvs, caparazon.indices)
+    this.numIndicesCaparazon = caparazon.numIndices
+    const borde = geo.crearBordeCaparazon()
+    this.vaoBorde = this.crearVAO(borde.posiciones, borde.uvs, borde.indices)
+    this.numIndicesBorde = borde.numIndices
+    const pua = geo.crearPua(0.18, 0.5, 10)
+    this.vaoPua = this.crearVAO(pua.posiciones, pua.uvs, pua.indices)
+    this.numIndicesPua = pua.numIndices
+    const rueda = geo.crearRueda(0.35, 0.25, 16)
+    this.vaoRueda = this.crearVAO(rueda.posiciones, rueda.uvs, rueda.indices)
+    this.numIndicesRueda = rueda.numIndices
+    const boca = geo.crearBoca(0.55)
+    this.vaoBoca = this.crearVAO(boca.posiciones, boca.uvs, boca.indices)
+    this.numIndicesBoca = boca.numIndices
+    const canon = geo.crearCanon()
+    this.vaoCanon = this.crearVAO(canon.posiciones, canon.uvs, canon.indices)
+    this.numIndicesCanon = canon.numIndices
+    const proyectil = geo.crearEsfera(0.25, 20, 20)
+    this.vaoProyectil = this.crearVAO(proyectil.posiciones, proyectil.uvs, proyectil.indices)
+    this.numIndicesProyectil = proyectil.numIndices
+    for (let i = 0; i < 3; i++) {
+      const obj = geo.crearEsfera(0.8, 24, 24)
+      this.vaoObjetivos.push(this.crearVAO(obj.posiciones, obj.uvs, obj.indices))
+      this.numIndicesObjetivos.push(obj.numIndices)
+    }
+    const cuadro = geo.crearCuadro(1, 1)
+    this.vaoCuadro = this.crearVAO(cuadro.posiciones, cuadro.uvs, cuadro.indices)
+    this.numIndicesCuadro = cuadro.numIndices
+  }
 
-    // la punta en espacio local del cañón está en (0, 0, -LARGO_CANON)
-    const puntaLocal = vec4.fromValues(0, 0, -LARGO_CANON, 1);
-    const puntaMundo = vec4.create();
-    vec4.transformMat4(puntaMundo, puntaLocal, this.modelElevacion);
+  // cadena de matrices jerarquicas del tanque
+  private actualizarMatricesTanque(): void {
+    mat4.identity(this.modelCuerpo)
+    mat4.translate(this.modelCuerpo, this.modelCuerpo, [this.desplazamientoX, 0.35, this.desplazamientoZ])
+    mat4.rotateY(this.modelCuerpo, this.modelCuerpo, this.rotacionCuerpoRad)
+    mat4.copy(this.modelCaparazon, this.modelCuerpo)
+    mat4.translate(this.modelCaparazon, this.modelCaparazon, [0, 0.35, 0])
+    mat4.copy(this.modelBorde, this.modelCuerpo)
+    mat4.translate(this.modelBorde, this.modelBorde, [0, 0.35, 0])
+    mat4.copy(this.modelBoca, this.modelCuerpo)
+    mat4.translate(this.modelBoca, this.modelBoca, [0, 0.35, -0.95])
+    mat4.copy(this.modelTorreta, this.modelCuerpo)
+    mat4.translate(this.modelTorreta, this.modelTorreta, [0, 0.35, -0.4])
+    mat4.rotateY(this.modelTorreta, this.modelTorreta, this.rotacionTorretaRad)
+    mat4.copy(this.modelElevacion, this.modelTorreta)
+    mat4.translate(this.modelElevacion, this.modelElevacion, [0, 0, -0.6])
+    mat4.rotateX(this.modelElevacion, this.modelElevacion, this.inclinacionCanonRad)
+  }
 
-    // la dirección adelante es el vector -Z transformado
-    const dirLocal = vec4.fromValues(0, 0, -1, 0);
-    const dirMundo = vec4.create();
-    vec4.transformMat4(dirMundo, dirLocal, this.modelElevacion);
+  // dibujar puas orientadas radialmente
+  private dibujarPua(latDeg: number, lonDeg: number, escala: number = 1): void {
+    mat4.copy(this.modelPua, this.modelCaparazon)
+    mat4.rotateY(this.modelPua, this.modelPua, lonDeg * (Math.PI / 180))
+    mat4.rotateX(this.modelPua, this.modelPua, latDeg * (Math.PI / 180))
+    mat4.translate(this.modelPua, this.modelPua, [0, 0.75, 0])
+    mat4.scale(this.modelPua, this.modelPua, [escala, escala, escala])
+    this.ff.setModelMatrix(this.modelPua)
+    this.sinTextura()
+    this.ff.setColor(this.colorPua)
+    this.gl.bindVertexArray(this.vaoPua)
+    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesPua, this.gl.UNSIGNED_SHORT, 0)
+  }
 
+  // calcular punta y direccion del canon
+  public obtenerPuntaCanon(): PuntaCanon {
+    const LARGO_CANON = 2.0
+    this.actualizarMatricesTanque()
+    const puntaLocal = vec4.fromValues(0, 0, -LARGO_CANON, 1)
+    const puntaMundo = vec4.create()
+    vec4.transformMat4(puntaMundo, puntaLocal, this.modelElevacion)
+    const dirLocal = vec4.fromValues(0, 0, -1, 0)
+    const dirMundo = vec4.create()
+    vec4.transformMat4(dirMundo, dirLocal, this.modelElevacion)
     return {
       posicion: [puntaMundo[0], puntaMundo[1], puntaMundo[2]],
       adelante: [dirMundo[0], dirMundo[1], dirMundo[2]]
-    };
+    }
   }
 
-  // recibe la posición en X directamente
-  public fijarTransformacionTorreta(desplazamientoX: number, desplazamientoZ: number, rotacionTorreta: number, inclinacion: number): void {
-    this.desplazamientoX = desplazamientoX;
-    this.desplazamientoZ = desplazamientoZ;
-    this.rotacionTorretaRad = rotacionTorreta * (Math.PI / 180);
-    this.inclinacionCanonRad = inclinacion * (Math.PI / 180);
+  // actualizar estado visual y rotacion de ruedas
+  public fijarTransformacionTanque(x: number, z: number, rotCuerpo: number, rotTorreta: number, inclinacion: number): void {
+    const dx = x - this.ultimaX
+    const dz = z - this.ultimaZ
+    const dist = Math.sqrt(dx * dx + dz * dz)
+    const rotRad = rotCuerpo * (Math.PI / 180)
+    const adelanteX = -Math.sin(rotRad)
+    const adelanteZ = -Math.cos(rotRad)
+    const signo = (dx * adelanteX + dz * adelanteZ) >= 0 ? 1 : -1
+    this.rotacionRuedaRad += signo * (dist / this.RADIO_RUEDA)
+    this.desplazamientoX = x
+    this.desplazamientoZ = z
+    this.ultimaX = x
+    this.ultimaZ = z
+    this.rotacionCuerpoRad = rotCuerpo * (Math.PI / 180)
+    this.rotacionTorretaRad = rotTorreta * (Math.PI / 180)
+    this.inclinacionCanonRad = inclinacion * (Math.PI / 180)
   }
 
-  public fijarIndicadorFuerza(nivel: 1 | 2 | 3): void {
-    this.nivelFuerzaActual = nivel;
-  }
-
+  public fijarIndicadorFuerza(nivel: 1 | 2 | 3): void { this.nivelFuerzaActual = nivel }
   public fijarTransformacionProyectil(posicion: [number, number, number], activo: boolean): void {
-    this.posicionProyectil = posicion;
-    this.proyectilActivo = activo;
+    this.posicionProyectil = posicion
+    this.proyectilActivo = activo
   }
-
-  // ponemos los objetivos a diferentes alturas para usar diferentes angulos de disparo
-  public obtenerPosicionesObjetivos(): { id: number; posicion: [number, number, number]; radio: number }[] {
+  public obtenerPosicionesObjetivos(): { id: number, posicion: [number, number, number], radio: number }[] {
     return [
-      { id: 1, posicion: [-5, 1.0, -10], radio: 0.8 },  
-      { id: 2, posicion: [5, 4.5, -12], radio: 0.8 },   
-      { id: 3, posicion: [0, 7.5, -14], radio: 0.8 }    
-    ];
+      { id: 1, posicion: [-8, 1.0, -10], radio: 0.8 },
+      { id: 2, posicion: [8, 4.5, -12], radio: 0.8 },
+      { id: 3, posicion: [0, 7.5, -14], radio: 0.8 }
+    ]
   }
-
   public actualizarObjetivos(objetivos: any[]): void {
-    // sincronizamos nuestro arreglo local con lo que decidió la física
-    for (let i = 0; i < 3; i++) {
-      this.objetivosVivos[i] = objetivos[i].vivo;
-    }
+    for (let i = 0; i < 3; i++) this.objetivosVivos[i] = objetivos[i].vivo
   }
 
+  // renderizado principal del juego
   public renderizar(matrizVista: Float32Array, matrizProyeccion: Float32Array): void {
+    this.gl.clearColor(0.85, 0.3, 0.05, 1.0)
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT)
+    this.gl.enable(this.gl.DEPTH_TEST)
+    this.ff.setProjectionMatrix(matrizProyeccion)
+    this.ff.setViewMatrix(matrizVista)
 
-    // limpiar pantalla con tono que recuerde a la lava 
-    this.gl.clearColor(0.85, 0.3, 0.05, 1.0);
-    this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
-    this.gl.enable(this.gl.DEPTH_TEST);
+    // suelo con textura activada
+    this.ff.setModelMatrix(mat4.create())
+    this.ff.enable('texture2D')
+    this.gl.activeTexture(this.gl.TEXTURE0)
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.texturas?.suelo || null)
+    this.ff.setColor([1, 1, 1]) 
+    this.gl.bindVertexArray(this.vaoSuelo)
+    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesSuelo, this.gl.UNSIGNED_SHORT, 0)
+    this.sinTextura()
 
-    this.ff.setProjectionMatrix(matrizProyeccion);
-    this.ff.setViewMatrix(matrizVista);
+    // montañas con color solido
+    this.ff.setColor([0.2, 0.12, 0.1])
+    this.gl.bindVertexArray(this.vaoMontanas)
+    const m1 = mat4.create(); mat4.translate(m1, m1, [-8, 0, -25]); mat4.scale(m1, m1, [0.8, 0.7, 1])
+    this.ff.setModelMatrix(m1); this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesMontanas, this.gl.UNSIGNED_SHORT, 0)
+    const m2 = mat4.create(); mat4.translate(m2, m2, [0, 0, -20]); mat4.scale(m2, m2, [1.2, 1.0, 1])
+    this.ff.setModelMatrix(m2); this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesMontanas, this.gl.UNSIGNED_SHORT, 0)
+    const m3 = mat4.create(); mat4.translate(m3, m3, [9, 0, -23]); mat4.scale(m3, m3, [0.9, 0.8, 1])
+    this.ff.setModelMatrix(m3); this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesMontanas, this.gl.UNSIGNED_SHORT, 0)
 
-    // suelo 
-    this.ff.setModelMatrix(mat4.create());
-    this.ff.setColor([0.35, 0.25, 0.2]);
-    this.gl.bindVertexArray(this.vaoSuelo);
-    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesSuelo, this.gl.UNSIGNED_SHORT, 0);
+    this.actualizarMatricesTanque()
 
-    // montañas de fondo 
-    this.ff.setColor([0.2, 0.12, 0.1]);
-    this.gl.bindVertexArray(this.vaoMontanas);
-    
-    // montaña izquierda, más pequeña y lejana
-    const modelMontana1 = mat4.create();
-    mat4.translate(modelMontana1, modelMontana1, [-8, 0, -25]);
-    mat4.scale(modelMontana1, modelMontana1, [0.8, 0.7, 1]);
-    this.ff.setModelMatrix(modelMontana1);
-    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesMontanas, this.gl.UNSIGNED_SHORT, 0);
-
-    // montaña central, la más grande y cercana
-    const modelMontana2 = mat4.create();
-    mat4.translate(modelMontana2, modelMontana2, [0, 0, -20]);
-    mat4.scale(modelMontana2, modelMontana2, [1.2, 1.0, 1]);
-    this.ff.setModelMatrix(modelMontana2);
-    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesMontanas, this.gl.UNSIGNED_SHORT, 0);
-
-    // montaña derecha, mediana
-    const modelMontana3 = mat4.create();
-    mat4.translate(modelMontana3, modelMontana3, [9, 0, -23]);
-    mat4.scale(modelMontana3, modelMontana3, [0.9, 0.8, 1]);
-    this.ff.setModelMatrix(modelMontana3);
-    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesMontanas, this.gl.UNSIGNED_SHORT, 0);
-    
-    // calculamos la posición y rotación actual de todas las partes del tanque
-    this.actualizarMatricesTanque();
-
-    // nodo de desplazamiento horizontal, base del tanque
-    //mat4.identity(this.modelDesplazamientoX);
-    //mat4.translate(this.modelDesplazamientoX, this.modelDesplazamientoX, [this.desplazamientoX, 1.0, 0]);
-
-    // base de la torreta
-    mat4.copy(this.modelBase, this.modelDesplazamientoX);
-    mat4.translate(this.modelBase, this.modelBase, [0, -0.5, 0]); 
-    this.ff.setModelMatrix(this.modelBase);
-    this.ff.setColor(this.colorTanque); 
-    this.gl.bindVertexArray(this.vaoBaseTorreta);
-    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesBase, this.gl.UNSIGNED_SHORT, 0);
-
-    // torreta superior 
-    //mat4.copy(this.modelEsfera, this.modelDesplazamientoX);
-    //mat4.translate(this.modelEsfera, this.modelEsfera, [0, 0.5, 0]); 
-    this.ff.setModelMatrix(this.modelEsfera);
-    this.ff.setColor(this.colorDomo); 
-    this.gl.bindVertexArray(this.vaoTorretaSuperior);
-    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesTorreta, this.gl.UNSIGNED_SHORT, 0);
-
-    // nodo de elevación
-    //mat4.copy(this.modelElevacion, this.modelDesplazamientoX);
-    //mat4.translate(this.modelElevacion, this.modelElevacion, [0, 0.5, -0.75]); 
-    //mat4.rotateX(this.modelElevacion, this.modelElevacion, this.inclinacionCanonRad);
-
-    // cañón
-    this.ff.setModelMatrix(this.modelElevacion);
-    this.ff.setColor(this.colorTanque); 
-    this.gl.bindVertexArray(this.vaoCanon);
-    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesCanon, this.gl.UNSIGNED_SHORT, 0);
-
-    // indicador de fuerza
-    mat4.copy(this.modelIndicador, this.modelBase);
-    mat4.translate(this.modelIndicador, this.modelIndicador, [0, 0.2, 1.02]); 
-
-    for (let i = 0; i < 3; i++) {
-      mat4.copy(this.modelBarra, this.modelIndicador);
-      mat4.translate(this.modelBarra, this.modelBarra, [0, i * 0.2, 0]); 
-      
-      this.ff.setModelMatrix(this.modelBarra);
-      if (i < this.nivelFuerzaActual) {
-        this.ff.setColor([0.2, 0.6, 1.0]); // azul eléctrico para encendido
-      } else {
-        this.ff.setColor([0.05, 0.1, 0.3]); // azul oscuro para apagado
-      }
-      
-      this.gl.bindVertexArray(this.vaoIndicador[i]);
-      this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesIndicador[i], this.gl.UNSIGNED_SHORT, 0);
+    // ruedas girando
+    this.sinTextura()
+    this.ff.setColor(this.colorRueda)
+    const ruedas: [number, number][] = [[-0.9, -0.7], [0.9, -0.7], [-0.9, 0.7], [0.9, 0.7]]
+    for (const [rx, rz] of ruedas) {
+      mat4.copy(this.modelRueda, this.modelCuerpo)
+      mat4.translate(this.modelRueda, this.modelRueda, [rx, 0, rz])
+      mat4.rotateX(this.modelRueda, this.modelRueda, this.rotacionRuedaRad)
+      this.ff.setModelMatrix(this.modelRueda)
+      this.gl.bindVertexArray(this.vaoRueda)
+      this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesRueda, this.gl.UNSIGNED_SHORT, 0)
     }
 
-    // proyectil azul y su trayectoria predicha
-    const modelProyectil = mat4.create();
+    // caparazon borde y boca
+    this.sinTextura()
+    this.ff.setModelMatrix(this.modelCaparazon)
+    this.ff.setColor(this.colorCaparazon)
+    this.gl.bindVertexArray(this.vaoCaparazon)
+    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesCaparazon, this.gl.UNSIGNED_SHORT, 0)
+    this.ff.setModelMatrix(this.modelBorde)
+    this.ff.setColor(this.colorBorde)
+    this.gl.bindVertexArray(this.vaoBorde)
+    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesBorde, this.gl.UNSIGNED_SHORT, 0)
+    this.ff.setModelMatrix(this.modelBoca)
+    this.ff.setColor(this.colorBoca)
+    this.gl.bindVertexArray(this.vaoBoca)
+    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesBoca, this.gl.UNSIGNED_SHORT, 0)
+
+    this.dibujarPua(0, 0, 1.2)
+    this.dibujarPua(55, 0)
+    this.dibujarPua(55, 90)
+    this.dibujarPua(55, 180)
+    this.dibujarPua(55, 270)
+    this.dibujarPua(80, 45, 0.8)
+    this.dibujarPua(80, 135, 0.8)
+    this.dibujarPua(80, 225, 0.8)
+    this.dibujarPua(80, 315, 0.8)
+
+    // canon saliendo de la boca
+    this.sinTextura()
+    this.ff.setModelMatrix(this.modelElevacion)
+    this.ff.setColor(this.colorCanon)
+    this.gl.bindVertexArray(this.vaoCanon)
+    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesCanon, this.gl.UNSIGNED_SHORT, 0)
+
+    // proyectil y trayectoria predicha
+    this.sinTextura()
+    const modelProyectil = mat4.create()
     if (this.proyectilActivo) {
-      mat4.translate(modelProyectil, modelProyectil, this.posicionProyectil);
-      this.ff.setModelMatrix(modelProyectil);
-      this.ff.setColor([0.3, 0.7, 1.0]); 
-      this.gl.bindVertexArray(this.vaoProyectil);
-      this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesProyectil, this.gl.UNSIGNED_SHORT, 0);
+      mat4.identity(modelProyectil)
+      mat4.translate(modelProyectil, modelProyectil, this.posicionProyectil)
+      this.ff.setModelMatrix(modelProyectil)
+      this.ff.setColor([0.3, 0.7, 1.0])
+      this.gl.bindVertexArray(this.vaoProyectil)
+      this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesProyectil, this.gl.UNSIGNED_SHORT, 0)
     } else {
-      mat4.copy(modelProyectil, this.modelElevacion);
-      mat4.translate(modelProyectil, modelProyectil, [0, 0, -2.15]); 
-      this.ff.setModelMatrix(modelProyectil);
-      this.ff.setColor([0.3, 0.7, 1.0]); 
-      this.gl.bindVertexArray(this.vaoProyectil);
-      this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesProyectil, this.gl.UNSIGNED_SHORT, 0);
-
-      // --- TRAYECTORIA PREDICHA INTEGRADA ---
-      const punta = this.obtenerPuntaCanon();
-      
-      const magnitudesFuerza: Record<1 | 2 | 3, number> = { 1: 15.0, 2: 25.0, 3: 35.0 };
-      const velocidadMag = magnitudesFuerza[this.nivelFuerzaActual];
-      
-      let p: [number, number, number] = [...punta.posicion];
-      let vel: [number, number, number] = [
-        punta.adelante[0] * velocidadMag,
-        punta.adelante[1] * velocidadMag,
-        punta.adelante[2] * velocidadMag
-      ];
-      
-      const dtSim = 0.05; 
-      const GRAVEDAD = -9.81; 
-      //const MAX_PUNTOS = 100; // Seguro anti-cuelgues 
-      //let pasos = 0;
-      
-      this.ff.setColor([0.3, 0.7, 1.0]); // Puntos azules como el proyectil
-      this.gl.bindVertexArray(this.vaoProyectil);
-
-      while (p[1] > 0) {
-        p[0] += vel[0] * dtSim;
-        p[1] += vel[1] * dtSim;
-        p[2] += vel[2] * dtSim;
-        vel[1] += GRAVEDAD * dtSim;
-
-        //if (p[1] <= 0) break; 
-
-        mat4.identity(modelProyectil); // Reutilizamos la matriz para no crear basura en memoria
-        mat4.translate(modelProyectil, modelProyectil, p);
-        mat4.scale(modelProyectil, modelProyectil, [0.3, 0.3, 0.3]); // Reutilizamos la esfera al 30% del tamaño
-
-        this.ff.setModelMatrix(modelProyectil);
-        
-        this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesProyectil, this.gl.UNSIGNED_SHORT, 0);
-        
-        //pasos++;
+      mat4.copy(modelProyectil, this.modelElevacion)
+      mat4.translate(modelProyectil, modelProyectil, [0, 0, -2.15])
+      this.ff.setModelMatrix(modelProyectil)
+      this.ff.setColor([0.3, 0.7, 1.0])
+      this.gl.bindVertexArray(this.vaoProyectil)
+      this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesProyectil, this.gl.UNSIGNED_SHORT, 0)
+      const punta = this.obtenerPuntaCanon()
+      const magnitudesFuerza: Record<1 | 2 | 3, number> = { 1: 15.0, 2: 25.0, 3: 35.0 }
+      const velocidadMag = magnitudesFuerza[this.nivelFuerzaActual]
+      let p: [number, number, number] = [...punta.posicion]
+      let vel: [number, number, number] = [punta.adelante[0] * velocidadMag, punta.adelante[1] * velocidadMag, punta.adelante[2] * velocidadMag]
+      const dtSim = 0.05
+      const GRAVEDAD = -9.81
+      let puntos = 0
+      this.ff.setColor([0.3, 0.7, 1.0])
+      this.gl.bindVertexArray(this.vaoProyectil)
+      while (p[1] > 0 && puntos < 40) {
+        p[0] += vel[0] * dtSim; p[1] += vel[1] * dtSim; p[2] += vel[2] * dtSim
+        vel[1] += GRAVEDAD * dtSim
+        mat4.identity(modelProyectil)
+        mat4.translate(modelProyectil, modelProyectil, p)
+        mat4.scale(modelProyectil, modelProyectil, [0.3, 0.3, 0.3])
+        this.ff.setModelMatrix(modelProyectil)
+        this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesProyectil, this.gl.UNSIGNED_SHORT, 0)
+        puntos++
       }
     }
 
-    // objetivos 
+    // objetivos flotantes
+    this.sinTextura()
     for (let i = 0; i < 3; i++) {
       if (this.objetivosVivos[i]) {
-        const pos = this.obtenerPosicionesObjetivos()[i].posicion;
-        const modelObj = mat4.create();
-        mat4.translate(modelObj, modelObj, pos);
-        this.ff.setModelMatrix(modelObj);
-        
-        if (i < 2) {
-          this.ff.setColor([0.5, 0.1, 0.6]); // Morados
-        } else {
-          this.ff.setColor([0.1, 0.8, 0.2]); // Verde
-        }
-
-        this.gl.bindVertexArray(this.vaoObjetivos[i]);
-        this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesObjetivos[i], this.gl.UNSIGNED_SHORT, 0);
+        const pos = this.obtenerPosicionesObjetivos()[i].posicion
+        const modelObj = mat4.create()
+        mat4.translate(modelObj, modelObj, pos)
+        this.ff.setModelMatrix(modelObj)
+        if (i < 2) this.ff.setColor([0.5, 0.1, 0.6])
+        else this.ff.setColor([0.1, 0.8, 0.2])
+        this.gl.bindVertexArray(this.vaoObjetivos[i])
+        this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesObjetivos[i], this.gl.UNSIGNED_SHORT, 0)
       }
     }
+
+    // interfaz dos d superpuesta
+    this.dibujarInterfaz2D()
+  }
+
+  // dibujar cuadrados de fuerza de izquierda a derecha
+  private dibujarInterfaz2D(): void {
+    // desactivar profundidad para la ui
+    this.gl.disable(this.gl.DEPTH_TEST)
+    this.sinTextura()
+    
+    // proyeccion ortografica para coordenadas de pantalla
+    const matrizOrto = mat4.ortho(mat4.create(), 0, 1920, 1080, 0, -1, 1)
+    const matrizIdentidad = mat4.create()
+    this.ff.setProjectionMatrix(matrizOrto as Float32Array)
+    this.ff.setViewMatrix(matrizIdentidad as Float32Array)
+    
+    const tamano = 60
+    const separacion = 10
+    const margenIzquierdo = 40
+    const margenSuperior = 40
+    for (let i = 0; i < 3; i++) {
+      const x = margenIzquierdo + i * (tamano + separacion)
+      const y = margenSuperior
+      mat4.identity(this.modelUI)
+      mat4.translate(this.modelUI, this.modelUI, [x + tamano/2, y + tamano/2, 0])
+      mat4.scale(this.modelUI, this.modelUI, [tamano, tamano, 1])
+      this.ff.setModelMatrix(this.modelUI as Float32Array)
+      if (i < this.nivelFuerzaActual) this.ff.setColor([0.2, 0.6, 1.0])
+      else this.ff.setColor([0.15, 0.15, 0.2])
+      this.gl.bindVertexArray(this.vaoCuadro)
+      this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesCuadro, this.gl.UNSIGNED_SHORT, 0)
+    }
+    this.gl.enable(this.gl.DEPTH_TEST)
   }
 }
