@@ -52,31 +52,47 @@ export function crearRueda(radio: number = 0.35, ancho: number = 0.25, segmentos
   return { posiciones: new Float32Array(posiciones), uvs: new Float32Array(uvs), indices: new Uint16Array(indices), numIndices: indices.length }
 }
 
-// caparazon media esfera achatada
+
+// caparazon cupula verde con base cerrada para que no se vea transparente
 export function crearCaparazon(radio: number = 1.2, segmentos: number = 20) {
   const posiciones: number[] = []
   const uvs: number[] = []
   const indices: number[] = []
   const altoCaparazon = 0.6
+
+  // cupula superior
   for (let lat = 0; lat <= segmentos / 2; lat++) {
     const theta = (lat / (segmentos / 2)) * (Math.PI / 2)
     const sinTheta = Math.sin(theta)
     const cosTheta = Math.cos(theta)
     for (let lon = 0; lon <= segmentos; lon++) {
       const phi = (lon / segmentos) * Math.PI * 2
-      const sinPhi = Math.sin(phi)
-      const cosPhi = Math.cos(phi)
-      posiciones.push(cosPhi * sinTheta * radio, cosTheta * altoCaparazon, sinPhi * sinTheta * radio)
+      posiciones.push(Math.cos(phi) * sinTheta * radio, cosTheta * altoCaparazon, Math.sin(phi) * sinTheta * radio)
       uvs.push(lon / segmentos, lat / (segmentos / 2))
     }
   }
   for (let lat = 0; lat < segmentos / 2; lat++) {
     for (let lon = 0; lon < segmentos; lon++) {
-      const first = (lat * (segmentos + 1)) + lon
+      const first = lat * (segmentos + 1) + lon
       const second = first + segmentos + 1
       indices.push(first, second, first + 1, second, second + 1, first + 1)
     }
   }
+
+  // base plana que cierra el hueco de abajo
+  const centroBase = posiciones.length / 3
+  posiciones.push(0, 0, 0)
+  uvs.push(0.5, 0.5)
+  const anilloBase = posiciones.length / 3
+  for (let lon = 0; lon <= segmentos; lon++) {
+    const phi = (lon / segmentos) * Math.PI * 2
+    posiciones.push(Math.cos(phi) * radio, 0, Math.sin(phi) * radio)
+    uvs.push(Math.cos(phi) * 0.5 + 0.5, Math.sin(phi) * 0.5 + 0.5)
+  }
+  for (let lon = 0; lon < segmentos; lon++) {
+    indices.push(centroBase, anilloBase + lon + 1, anilloBase + lon)
+  }
+
   return { posiciones: new Float32Array(posiciones), uvs: new Float32Array(uvs), indices: new Uint16Array(indices), numIndices: indices.length }
 }
 
