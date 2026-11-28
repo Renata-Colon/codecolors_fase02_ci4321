@@ -4,16 +4,13 @@ import * as geo from './geometria'
 import { cargarTexturas, texturasJuego } from './texturas'
 import { mat4, vec4 } from 'gl-matrix'
 
-// escena grafica del juego
 export class EscenaGrafica implements EscenaJuego {
   private gl: WebGL2RenderingContext
   private ff: any
-  
-  // aqui guardamos las texturas cargadas
   private texturas: texturasJuego | null = null
 
-  // vaos para cada parte del tanque y entorno
   private vaoSuelo: WebGLVertexArrayObject | null = null
+  private vaoCielo: WebGLVertexArrayObject | null = null
   private vaoMontanas: WebGLVertexArrayObject | null = null
   private vaoCaparazon: WebGLVertexArrayObject | null = null
   private vaoBorde: WebGLVertexArrayObject | null = null
@@ -26,6 +23,7 @@ export class EscenaGrafica implements EscenaJuego {
   private vaoCuadro: WebGLVertexArrayObject | null = null 
 
   private numIndicesSuelo = 0
+  private numIndicesCielo = 0
   private numIndicesMontanas = 0
   private numIndicesCaparazon = 0
   private numIndicesBorde = 0
@@ -37,7 +35,6 @@ export class EscenaGrafica implements EscenaJuego {
   private numIndicesObjetivos: number[] = []
   private numIndicesCuadro = 0
 
-  // matrices prealocadas para no crear basura
   private modelCuerpo = mat4.create()
   private modelRueda = mat4.create()
   private modelCaparazon = mat4.create()
@@ -48,7 +45,6 @@ export class EscenaGrafica implements EscenaJuego {
   private modelElevacion = mat4.create()
   private modelUI = mat4.create()
 
-  // estado visual del tanque
   private desplazamientoX = 0
   private desplazamientoZ = 0
   private rotacionCuerpoRad = 0
@@ -59,13 +55,11 @@ export class EscenaGrafica implements EscenaJuego {
   private proyectilActivo = false
   private objetivosVivos = [true, true, true]
 
-  // ruedas giran proporcional a la distancia
   private rotacionRuedaRad = 0
   private ultimaX = 0
   private ultimaZ = 0
   private readonly RADIO_RUEDA = 0.35
 
-  // paleta de colores estilo bowser
   private readonly colorCaparazon: [number, number, number] = [0.15, 0.55, 0.15]
   private readonly colorBorde: [number, number, number] = [0.95, 0.9, 0.78]
   private readonly colorPua: [number, number, number] = [0.9, 0.8, 0.5]
@@ -79,39 +73,30 @@ export class EscenaGrafica implements EscenaJuego {
     this.inicializarGeometria()
   }
 
-  // metodo publico para cargar imagenes antes de iniciar
   public async cargarTexturas(): Promise<void> {
     this.texturas = await cargarTexturas(this.gl)
-    console.log('textura del suelo cargada correctamente')
+    console.log('texturas cargadas correctamente')
   }
 
-  // helper para desactivar texturas y desbindear
   private sinTextura(): void {
     this.ff.disable('texture2D')
     this.gl.activeTexture(this.gl.TEXTURE0)
     this.gl.bindTexture(this.gl.TEXTURE_2D, null)
   }
 
-  // funcion auxiliar para crear vao con posiciones y uvs
   private crearVAO(posiciones: Float32Array, uvs: Float32Array, indices: Uint16Array): WebGLVertexArrayObject {
     const vao = this.gl.createVertexArray()!
     this.gl.bindVertexArray(vao)
     const posBuffer = this.gl.createBuffer()!
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, posBuffer)
     this.gl.bufferData(this.gl.ARRAY_BUFFER, posiciones, this.gl.STATIC_DRAW)
-    
-    // slot cero para posiciones
     this.gl.enableVertexAttribArray(0)
     this.gl.vertexAttribPointer(0, 3, this.gl.FLOAT, false, 0, 0)
-    
     const uvBuffer = this.gl.createBuffer()!
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, uvBuffer)
     this.gl.bufferData(this.gl.ARRAY_BUFFER, uvs, this.gl.STATIC_DRAW)
-    
-    // slot tres para uvs segun la libreria del profe
     this.gl.enableVertexAttribArray(3)
     this.gl.vertexAttribPointer(3, 2, this.gl.FLOAT, false, 0, 0)
-    
     const idxBuffer = this.gl.createBuffer()!
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, idxBuffer)
     this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, indices, this.gl.STATIC_DRAW)
@@ -119,8 +104,12 @@ export class EscenaGrafica implements EscenaJuego {
     return vao
   }
 
-  // cargar todas las geometrias y crear sus vao
   private inicializarGeometria() {
+    // esfera gigante para el cielo (radio 150 para que rodee todo)
+    const cielo = geo.crearEsfera(150, 32, 32)
+    this.vaoCielo = this.crearVAO(cielo.posiciones, cielo.uvs, cielo.indices)
+    this.numIndicesCielo = cielo.numIndices
+
     const suelo = geo.crearSuelo()
     this.vaoSuelo = this.crearVAO(suelo.posiciones, suelo.uvs, suelo.indices)
     this.numIndicesSuelo = suelo.numIndices
@@ -158,7 +147,6 @@ export class EscenaGrafica implements EscenaJuego {
     this.numIndicesCuadro = cuadro.numIndices
   }
 
-  // cadena de matrices jerarquicas del tanque
   private actualizarMatricesTanque(): void {
     mat4.identity(this.modelCuerpo)
     mat4.translate(this.modelCuerpo, this.modelCuerpo, [this.desplazamientoX, 0.35, this.desplazamientoZ])
@@ -177,7 +165,6 @@ export class EscenaGrafica implements EscenaJuego {
     mat4.rotateX(this.modelElevacion, this.modelElevacion, this.inclinacionCanonRad)
   }
 
-  // dibujar puas orientadas radialmente
   private dibujarPua(latDeg: number, lonDeg: number, escala: number = 1): void {
     mat4.copy(this.modelPua, this.modelCaparazon)
     mat4.rotateY(this.modelPua, this.modelPua, lonDeg * (Math.PI / 180))
@@ -191,7 +178,6 @@ export class EscenaGrafica implements EscenaJuego {
     this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesPua, this.gl.UNSIGNED_SHORT, 0)
   }
 
-  // calcular punta y direccion del canon
   public obtenerPuntaCanon(): PuntaCanon {
     const LARGO_CANON = 2.0
     this.actualizarMatricesTanque()
@@ -207,7 +193,6 @@ export class EscenaGrafica implements EscenaJuego {
     }
   }
 
-  // actualizar estado visual y rotacion de ruedas
   public fijarTransformacionTanque(x: number, z: number, rotCuerpo: number, rotTorreta: number, inclinacion: number): void {
     const dx = x - this.ultimaX
     const dz = z - this.ultimaZ
@@ -242,15 +227,31 @@ export class EscenaGrafica implements EscenaJuego {
     for (let i = 0; i < 3; i++) this.objetivosVivos[i] = objetivos[i].vivo
   }
 
-  // renderizado principal del juego
   public renderizar(matrizVista: Float32Array, matrizProyeccion: Float32Array): void {
-    this.gl.clearColor(0.85, 0.3, 0.05, 1.0)
+    this.gl.clearColor(0.0, 0.0, 0.0, 1.0) // fondo negro por si falla el cielo
     this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT)
     this.gl.enable(this.gl.DEPTH_TEST)
     this.ff.setProjectionMatrix(matrizProyeccion)
     this.ff.setViewMatrix(matrizVista)
 
-    // suelo con textura activada
+    // dibujar el cielo primero
+    // desactivamos el culling de caras para ver las caras internas de la esfera
+    this.gl.disable(this.gl.CULL_FACE)
+    this.gl.depthMask(false)
+    
+    this.ff.setModelMatrix(mat4.create())
+    this.ff.enable('texture2D')
+    this.gl.activeTexture(this.gl.TEXTURE0)
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.texturas?.cielo || null)
+    this.ff.setColor([1, 1, 1])
+    this.gl.bindVertexArray(this.vaoCielo)
+    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesCielo, this.gl.UNSIGNED_SHORT, 0)
+    
+    this.sinTextura()
+    this.gl.depthMask(true)
+    this.gl.enable(this.gl.CULL_FACE)
+
+    // suelo con textura
     this.ff.setModelMatrix(mat4.create())
     this.ff.enable('texture2D')
     this.gl.activeTexture(this.gl.TEXTURE0)
@@ -260,7 +261,7 @@ export class EscenaGrafica implements EscenaJuego {
     this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesSuelo, this.gl.UNSIGNED_SHORT, 0)
     this.sinTextura()
 
-    // montañas con color solido
+    // montañas
     this.ff.setColor([0.2, 0.12, 0.1])
     this.gl.bindVertexArray(this.vaoMontanas)
     const m1 = mat4.create(); mat4.translate(m1, m1, [-8, 0, -25]); mat4.scale(m1, m1, [0.8, 0.7, 1])
@@ -272,7 +273,7 @@ export class EscenaGrafica implements EscenaJuego {
 
     this.actualizarMatricesTanque()
 
-    // ruedas girando
+    // ruedas
     this.sinTextura()
     this.ff.setColor(this.colorRueda)
     const ruedas: [number, number][] = [[-0.9, -0.7], [0.9, -0.7], [-0.9, 0.7], [0.9, 0.7]]
@@ -284,6 +285,14 @@ export class EscenaGrafica implements EscenaJuego {
       this.gl.bindVertexArray(this.vaoRueda)
       this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesRueda, this.gl.UNSIGNED_SHORT, 0)
     }
+
+    // caparazon con las dos caras activas para evitar transparencias
+    this.gl.disable(this.gl.CULL_FACE)
+    this.ff.setModelMatrix(this.modelCaparazon)
+    this.ff.setColor(this.colorCaparazon)
+    this.gl.bindVertexArray(this.vaoCaparazon)
+    this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesCaparazon, this.gl.UNSIGNED_SHORT, 0)
+    this.gl.enable(this.gl.CULL_FACE)
 
     // caparazon borde y boca
     this.sinTextura()
@@ -310,14 +319,14 @@ export class EscenaGrafica implements EscenaJuego {
     this.dibujarPua(80, 225, 0.8)
     this.dibujarPua(80, 315, 0.8)
 
-    // canon saliendo de la boca
+    // canon
     this.sinTextura()
     this.ff.setModelMatrix(this.modelElevacion)
     this.ff.setColor(this.colorCanon)
     this.gl.bindVertexArray(this.vaoCanon)
     this.ff.drawElements(this.gl.TRIANGLES, this.numIndicesCanon, this.gl.UNSIGNED_SHORT, 0)
 
-    // proyectil y trayectoria predicha
+    // proyectil y trayectoria
     this.sinTextura()
     const modelProyectil = mat4.create()
     if (this.proyectilActivo) {
@@ -356,7 +365,7 @@ export class EscenaGrafica implements EscenaJuego {
       }
     }
 
-    // objetivos flotantes
+    // objetivos
     this.sinTextura()
     for (let i = 0; i < 3; i++) {
       if (this.objetivosVivos[i]) {
@@ -371,22 +380,17 @@ export class EscenaGrafica implements EscenaJuego {
       }
     }
 
-    // interfaz dos d superpuesta
+    // interfaz
     this.dibujarInterfaz2D()
   }
 
-  // dibujar cuadrados de fuerza de izquierda a derecha
   private dibujarInterfaz2D(): void {
-    // desactivar profundidad para la ui
     this.gl.disable(this.gl.DEPTH_TEST)
     this.sinTextura()
-    
-    // proyeccion ortografica para coordenadas de pantalla
     const matrizOrto = mat4.ortho(mat4.create(), 0, 1920, 1080, 0, -1, 1)
     const matrizIdentidad = mat4.create()
     this.ff.setProjectionMatrix(matrizOrto as Float32Array)
     this.ff.setViewMatrix(matrizIdentidad as Float32Array)
-    
     const tamano = 60
     const separacion = 10
     const margenIzquierdo = 40
